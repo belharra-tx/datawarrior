@@ -66,7 +66,7 @@ public class DETaskSQLQuery extends ConfigurableTask implements ItemListener {
 	private static final String STRUCTURE_COLUMN_NAME_START ="Structure of ";
 
 	private static JLoginDialog sLoginDialog;
-	private static boolean	sOracleDriverRegistered,sMySQLDriverRegistered,sPostgreSQLDriverRegistered,sSQLServerDriverRegistered,sMSAccessDriverRegistered;
+	private static boolean	sOracleDriverRegistered,sMySQLDriverRegistered,sPostgreSQLDriverRegistered,sSQLServerDriverRegistered,sMSAccessDriverRegistered,sAthenaDriverRegistered;
 	private static TreeMap<String,DatabaseSpec> sKnownDatabaseMap;	// map from database name to connect string
 	private static TreeMap<String,Connection> sConnectionCache;	// map from connect string to connection
 
@@ -136,6 +136,21 @@ public class DETaskSQLQuery extends ConfigurableTask implements ItemListener {
 		if (connectString.startsWith("jdbc:"))
 			connectString = connectString.substring(5);
 
+		if (connectString.startsWith("awsathena:")) {
+			if (registerAthenaDiver()) {
+				try {
+					java.util.Properties props = new Properties();
+					if (!connectString.contains("User")) {
+						props.put("User", user);
+						props.put("Password", password);
+					}
+					connection = DriverManager.getConnection("jdbc:"+connectString, props);
+				} catch (Exception ex) {
+					ex.printStackTrace();
+					showErrorMessage(ex.getMessage());
+				}
+			}
+		}
 		if (connectString.startsWith("oracle:")) {
 			if (registerOracleDriver()) {
 				try {
@@ -218,7 +233,11 @@ public class DETaskSQLQuery extends ConfigurableTask implements ItemListener {
 		else if ((user != null && user.length() != 0 && password != null)
 			  || connectString.startsWith("ucanaccess:")) {
 			openConnection(connectString, user, password);
-			}
+		}
+		else if (connectString.contains("awsathena://") && connectString.contains("User") && connectString.contains("Password")) {
+			// Connection string contains credentials, don't show login dialog
+			openConnection(connectString, user, password);
+		}
 		else {
 			try {
 				SwingUtilities.invokeAndWait(() -> {
@@ -295,6 +314,19 @@ public class DETaskSQLQuery extends ConfigurableTask implements ItemListener {
 			}
 		}
 		return sPostgreSQLDriverRegistered;
+	}
+
+	private boolean registerAthenaDiver() {
+		if (!sAthenaDriverRegistered) {
+			try {
+				Class.forName("com.simba.athena.jdbc.Driver").newInstance();
+				sAthenaDriverRegistered = true;
+			} catch (Exception ex) {
+				ex.printStackTrace();
+				showErrorMessage(ex.getMessage());
+			}
+		}
+		return sAthenaDriverRegistered;
 	}
 
 	private boolean registerSQLServerDriver() {
